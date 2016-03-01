@@ -1,0 +1,12 @@
+language: ruby
+script: bundle exec rake rubocop
+rvm:
+  - 2.2.3
+  - 2.2.4 # jenkinsqa
+  - ruby-head
+matrix:
+  allow_failures:
+    - rvm: ruby-head
+
+notifications: false
+sudo: false
