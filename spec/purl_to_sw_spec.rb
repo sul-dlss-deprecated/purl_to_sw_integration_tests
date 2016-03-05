@@ -49,30 +49,147 @@ describe "Purl objects released to SearchWorks" do
     skip('when dispatcher service sends true releases to SW prod, we should use expect statement') # and output ids of probs
   end
 
-  it "Hydrus single items from Purl are single digital repo items without coll in SW" do
-    skip "write this test"
-  end
-
-  it "all managed Purl objects have a purl link, are online, and no druid" do
-    # purl link
-    # are online
-    # NO druid, just catkey
-    skip "write this test"
-  end
-
-  it "all Purl objects without ckey have a druid, a purl link and are online" do
-    # purl link
-    # are online
-    # have  druid, no catkey
-    skip "write this test"
-  end
-
   it "all true_releases_ssim Purl objects are in SearchWorks" do
-    skip "need to write this test -- over 10,000 such ids"
+    # covered by "all released managed Purl objects ... " and "all released Purl objects without ckey" tests
   end
 
-  it "no false_releases_ssim Purl objects are in SearchWorks" do
-    skip "need to write this test -- over 10,000 such ids"
+  it "all released managed Purl objects have expected fields in SW" do
+    # want to get all the ids before failing
+    missing_sw_docs = []
+    missing_managed_purl = []
+    missing_access_online = []
+    missing_sdr_building = []
+    purl_solr_params = { 'fq' => ['true_releases_ssim:Searchworks', 'catkey_tsi:*'],
+      'fl' => 'id,catkey_tsi', 'rows' => '20000' }
+    purl_resp = solr_response(SolrConns.purl, purl_solr_params)
+    purl_resp['response']['docs'].each do |purl_solr_doc|
+      sw_solr_doc = solr_resp_single_doc(SolrConns.sw, purl_solr_doc['catkey_tsi'])['response']['docs'].first
+      bdruid = bare_druid(purl_solr_doc['id'])
+      unless sw_solr_doc
+        missing_sw_docs << "#{purl_solr_doc['catkey_tsi']} (for #{bdruid})"
+        next
+      end
+      unless sw_solr_doc['managed_purl_urls'] && sw_solr_doc['managed_purl_urls'].any? { |u| u.match(bdruid) }
+        missing_managed_purl << purl_solr_doc['catkey_tsi']
+      end
+      expect(sw_solr_doc['marcxml'].size).to be > 30
+      expect(sw_solr_doc['modsxml']).to be_nil
+      expect(sw_solr_doc['druid']).to be_nil
+      # FIXME: I believe the following expect statements should be true;
+      # uncomment expect lines after new production index installed March 2016
+      # expect(sw_solr_doc['access_facet']).to include('Online')
+      # expect(sw_solr_doc['building_facet']).to include('Stanford Digital Repository')
+      unless sw_solr_doc['access_facet'] && sw_solr_doc['access_facet'].include?('Online')
+        missing_access_online << purl_solr_doc['catkey_tsi']
+      end
+      unless sw_solr_doc['building_facet'] && sw_solr_doc['building_facet'].include?('Stanford Digital Repository')
+        missing_sdr_building << purl_solr_doc['catkey_tsi']
+      end
+    end
+    if missing_access_online.empty? || missing_sdr_building.empty? || missing_managed_purl.empty?
+      if missing_access_online.empty?
+        puts "ALERT: #{missing_access_online.size} managed purl SW docs missing access_facet value of 'Online'"
+      end
+      if missing_sdr_building.empty?
+        puts "ALERT: #{missing_sdr_building.size} managed purl SW docs missing building_facet value of 'Stanford Digital Repository'"
+      end
+      if missing_managed_purl.empty?
+        puts "ALERT: #{missing_managed_purl.size} managed purl SW docs missing expected managed_purl_value"
+      end
+      # FIXME: uncomment fail after new production index installed March 2016
+      # fail "required fields missing (output ids and fields missing)"
+    end
+    if missing_sw_docs
+      puts "ALERT: expected #{missing_sw_docs} to be SW docs (released; ckey in Purl index)"
+      fail "expected #{missing_sw_docs} to be SW docs (released; ckey in Purl index)"
+    end
+  end
+
+  it "all released Purl objects without ckey have docs w expected fields in SW" do
+    # want to get all the ids before failing
+    missing_sw_docs = []
+    missing_access_online = []
+    missing_sdr_building = []
+    purl_solr_params = { 'fq' => ['true_releases_ssim:Searchworks', '-catkey_tsi:*'],
+      'fl' => 'id', 'rows' => '20000' }
+    purl_resp = solr_response(SolrConns.purl, purl_solr_params)
+    purl_resp['response']['docs'].each do |purl_solr_doc|
+      bdruid = bare_druid(purl_solr_doc['id'])
+      sw_solr_doc = solr_resp_single_doc(SolrConns.sw, bdruid)['response']['docs'].first
+      unless sw_solr_doc
+        missing_sw_docs << bdruid
+        next
+      end
+      expect(sw_solr_doc['id']).to eq bdruid
+      expect(sw_solr_doc['url_fulltext']).to include(a_string_matching(%r{https?://purl.stanford.edu/#{bdruid}}))
+      expect(sw_solr_doc['modsxml'].size).to be > 30
+      expect(sw_solr_doc['marcxml']).to be_nil
+      expect(sw_solr_doc['druid']).to eq bdruid
+      # FIXME: I believe the following expect statements should be true;
+      #  uncomment these lines after new production index installed March 2016
+      # expect(sw_solr_doc['access_facet']).to include('Online')
+      # expect(sw_solr_doc['building_facet']).to include('Stanford Digital Repository')
+      unless sw_solr_doc['access_facet'] && sw_solr_doc['access_facet'].include?('Online')
+        missing_access_online << bdruid
+      end
+      unless sw_solr_doc['building_facet'] && sw_solr_doc['building_facet'].include?('Stanford Digital Repository')
+        missing_sdr_building << bdruid
+      end
+    end
+
+    if missing_access_online.empty? || missing_sdr_building.empty?
+      if missing_access_online.empty?
+        puts "ALERT: #{missing_access_online.size} SW (druid) docs missing access_facet value of 'Online'"
+      end
+      if missing_sdr_building.empty?
+        puts "#{missing_sdr_building.size} SW (druid) docs missing building_facet value of 'Stanford Digital Repository'"
+      end
+      # FIXME: uncomment fail after new production index installed March 2016
+      # fail "required fields missing (output ids and fields missing)"
+    end
+    if missing_sw_docs
+      puts "ALERT: expected #{missing_sw_docs} to be SW docs (released; no ckey in Purl index)"
+      fail "expected #{missing_sw_docs} to be SW docs (released; no ckey in Purl index)"
+    end
+  end
+
+  it "no False Release Purl objects are in SearchWorks" do
+    # want to get all the ids before failing
+    sw_docs_should_not_exist = []
+    sw_docs_w_unexpected_managed_purl = []
+    purl_solr_params = { 'fq' => ['false_releases_ssim:Searchworks'], 'fl' => 'id,catkey_tsi', 'rows' => '20000' }
+    solr_response(SolrConns.purl, purl_solr_params)['response']['docs'].each do |purl_solr_doc|
+      bdruid = bare_druid(purl_solr_doc['id'])
+      sw_doc_id =
+        if purl_solr_doc['catkey_tsi']
+          has_ckey = true
+          purl_solr_doc['catkey_tsi']
+        else
+          bdruid
+        end
+      sw_doc = solr_resp_single_doc(SolrConns.sw, sw_doc_id)['response']['docs'].first
+      if has_ckey && sw_doc
+        # one ckey doc may have multiple managed purls
+        if sw_doc['managed_purl_urls'] && sw_solr_doc['managed_purl_urls'].any? { |u| u.match(bdruid) }
+          sw_docs_w_unexpected_managed_purl << "#{bdruid} for #{sw_doc_id}"
+        end
+      else
+        sw_docs_should_not_exist << bdruid if sw_doc
+      end
+    end
+    if sw_docs_should_not_exist.empty? || sw_docs_w_unexpected_managed_purl.empty?
+      if sw_docs_should_not_exist.empty?
+        puts "ALERT: Purl false release objects without ckeys exist in SW: #{sw_docs_should_not_exist}"
+      end
+      if sw_docs_w_unexpected_managed_purl.empty?
+        puts "ALERT: Purl false release objects w ckeys have managed purls in SW: #{sw_docs_w_unexpected_managed_purl}"
+      end
+      fail('unexpected Purl objects in SW')
+    end
+  end
+
+  def bare_druid(purl_solr_doc_id)
+    purl_solr_doc_id.split('druid:').last
   end
 end
 
