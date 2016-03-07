@@ -170,7 +170,7 @@ describe "Purl objects released to SearchWorks" do
       sw_doc = solr_resp_single_doc(SolrConns.sw, sw_doc_id)['response']['docs'].first
       if has_ckey && sw_doc
         # one ckey doc may have multiple managed purls
-        if sw_doc['managed_purl_urls'] && sw_solr_doc['managed_purl_urls'].any? { |u| u.match(bdruid) }
+        if sw_doc['managed_purl_urls'] && sw_doc['managed_purl_urls'].any? { |u| u.match(bdruid) }
           sw_docs_w_unexpected_managed_purl << "#{bdruid} for #{sw_doc_id}"
         end
       else
